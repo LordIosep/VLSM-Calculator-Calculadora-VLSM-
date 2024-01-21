@@ -52,7 +52,3 @@ Este script Python utiliza Tkinter para una interfaz gráfica de usuario, implem
 # Ejecución
 ```bash
 python nombre_del_script_que_pongas.py
-
-
-
-
