@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, font, messagebox
 import ipaddress
+from openpyxl import Workbook
+import os
 
 class VLSMCalculator:
     def __init__(self):
@@ -86,7 +88,7 @@ class VLSMCalculator:
         self.spinboxSubredes.pack(padx=15, pady=(0, 10), anchor=tk.W)
 
         # Lista para almacenar los contenedores de Entry
-        self.labelSubredes = tk.Label(self.scrollable_frame_menu, text="Nombre Host  Número Host")
+        self.labelSubredes = tk.Label(self.scrollable_frame_menu, text="Nombre Host    Número Host")
         self.labelSubredes.config(fg="#f1faff", font=("Terminal", 12), bg="#2a3138", pady=2)
         self.labelSubredes.pack(side=tk.TOP, anchor=tk.W, padx=10)
 
@@ -102,9 +104,17 @@ class VLSMCalculator:
         self.root.style.configure("TButton", padding=10, font=("Roboto", 12), background="#1f2329", foreground="#1f2329")
         self.root.style.map("TButton", background=[("active", "#1f2329")])
 
+        # Crear un Frame secundario para los botones
+        self.frame_botones = tk.Frame(self.scrollable_frame_menu, bg='#2a3138')
+        self.frame_botones.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
+
         # Crear el botón para calcular al final
-        self.botonCalcular = ttk.Button(self.scrollable_frame_menu, text="Calcular", style="TButton", command=self.realizar_calculo)
-        self.botonCalcular.pack(side=tk.BOTTOM, pady=10, anchor=tk.W, padx=15)
+        self.botonCalcular = ttk.Button(self.frame_botones, text="Calcular", style="TButton", command=self.realizar_calculo)
+        self.botonCalcular.pack(side=tk.LEFT, pady=10, padx=26)
+
+        # Botón de exportar
+        self.botonExportar = ttk.Button(self.frame_botones, text="Exportar a Excel", style="TButton", command=self.exportar_a_excel)
+        self.botonExportar.pack(side=tk.LEFT, pady=10, padx=5)
 
     def actualizar_entries(self):
         # Obtener la cantidad actual de contenedores de Entry
@@ -121,11 +131,11 @@ class VLSMCalculator:
                 contenedor.pack(side=tk.TOP, anchor=tk.W, padx=10, pady=5)
 
                 entry1 = tk.Entry(contenedor, bg='#f1faff', fg='#1f2329', insertbackground='#1f2329')
-                entry1.config(font=("Terminal", 12), width=11, relief=tk.FLAT, bd=2)
+                entry1.config(font=("Terminal", 12), width=13, relief=tk.FLAT, bd=2)
                 entry1.pack(side=tk.LEFT, padx=5)
 
                 entry2 = tk.Entry(contenedor, bg='#f1faff', fg='#1f2329', insertbackground='#1f2329')
-                entry2.config(font=("Terminal", 12), width=11, relief=tk.FLAT, bd=2)
+                entry2.config(font=("Terminal", 12), width=13, relief=tk.FLAT, bd=2)
                 entry2.pack(side=tk.LEFT, padx=11)
 
                 # Agregar las Entry a la lista
@@ -235,15 +245,26 @@ class VLSMCalculator:
             #print(f"{nueva_mascara_cidr, hosts_utilizables}")
         return nueva_mascara_cidr, hosts_utilizables
 
+    
     def controles_cuerpo(self):
         # Crea el Treeview para la tabla
         self.tabla = ttk.Treeview(self.cuerpo_principal, columns=("Subred", "Dirección de Red", "CIDR", "Máscara Decimal", "Hosts Solicitados", "Hosts Utilizables", "Rango IPs Utilizables", "Broadcast"))
+        
         # Configura el estilo para agregar líneas de cuadrícula y alternancia de colores
         style = ttk.Style()
         style.configure("Treeview", rowheight=20, font=('Arial', 8), rowmargin=1)
+        style.configure("Treeview.Heading", font=('Arial', 10, 'bold'))
+        style.layout("mystyle.Treeview", [('mystyle.Treeview.treearea', {'sticky': 'nswe'})])  # Configura el estilo del área de árbol
+        style.map('Treeview', background=[('selected', '#2a3138')], foreground=[('selected', 'white')])
+        # Establece el color de fondo para filas pares e impares
+        style.configure("mystyle.Treeview", background="#f0f0f0")
+
+        # Establece el estilo creado para la tabla
+        self.tabla.config(style="mystyle.Treeview")
+
         # Oculta la columna de índices
         self.tabla["show"] = "headings"
-        
+
         # Configura el encabezado de la tabla
         for col in ("Subred", "Dirección de Red", "CIDR", "Máscara Decimal", "Hosts Solicitados", "Hosts Utilizables", "Rango IPs Utilizables", "Broadcast"):
             self.tabla.heading(col, text=col)
@@ -268,6 +289,9 @@ class VLSMCalculator:
         self.cuerpo_principal.grid_columnconfigure(0, weight=1)
 
     def actualizar_tabla(self, resultados):
+        # Define colores
+        color_even = "#CACFD2"
+        color_odd = "#F7F9F9"
         # Elimina todas las filas actuales
         for i in self.tabla.get_children():
             self.tabla.delete(i)
@@ -275,7 +299,7 @@ class VLSMCalculator:
         # Inserta los nuevos datos en la tabla
         direccion_actual = None  # Variable para almacenar la dirección de red actual
 
-        for resultado in resultados:
+        for i, resultado in enumerate(resultados):
             nombre_subred = resultado['nombre_subred']
             direccion_red = resultado['direccion_red']
             mascara_cidr = resultado['mascara_cidr']
@@ -288,7 +312,7 @@ class VLSMCalculator:
             # Crear nueva presentación de la dirección de red
             if direccion_actual is None:
                 direccion_actual = direccion_red
-            presentacion_direccion_red = f"{direccion_actual} - {rango_ips_utilizables}"
+                presentacion_direccion_red = f"{direccion_actual} - {rango_ips_utilizables}"
 
             # Agregar fila a la tabla
             self.tabla.insert("", "end", values=(
@@ -300,7 +324,40 @@ class VLSMCalculator:
                 cantidad_hosts_utilizables,
                 rango_ips_utilizables,
                 direccion_broadcast
-            ))
+            ), tags=(f"row{i}",))
+            
+        # Aplica estilo a las filas pares e impares
+        for i in range(len(resultados)):
+            color = color_even if i % 2 == 0 else color_odd
+            self.tabla.tag_configure(f"row{i}", background=color)
+
+
+    def exportar_a_excel(self):
+        try:
+            # Crear un nuevo libro de trabajo de Excel
+            wb = Workbook()
+            ws = wb.active
+
+            # Encabezados de la tabla
+            headers = ["Subred", "Dirección de Red", "CIDR", "Máscara Decimal", "Hosts Solicitados", "Hosts Utilizables", "Rango IPs Utilizables", "Broadcast"]
+            ws.append(headers)
+
+            # Agregar datos de la tabla al libro de trabajo
+            for child_id in self.tabla.get_children():
+                values = self.tabla.item(child_id, 'values')
+                ws.append(values)
+
+            # Guardar el archivo Excel
+            wb.save("resultados_vlsm.xlsx")
+            
+            # Abrir el archivo Excel con el programa predeterminado
+            os.system("start resultados_vlsm.xlsx")
+
+            messagebox.showinfo("Éxito", "Resultados exportados a resultados_vlsm.xlsx")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo exportar a Excel: {str(e)}")
+
+
 
     def toggle_panel(self):
         # Alternar visibilidad del menú lateral
